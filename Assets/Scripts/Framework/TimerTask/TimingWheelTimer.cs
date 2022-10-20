@@ -76,6 +76,12 @@ namespace Framework.TimerTask {
             }
         }
 
+
+        public void Step(long timeStamp)
+        {
+            _timingWheel.Step(timeStamp,(task => {task.Run();}));
+        }
+
     }
 
 }

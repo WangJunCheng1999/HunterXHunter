@@ -26,6 +26,8 @@ namespace Framework.TimerTask.Interface {
         /// <returns>添加成功返回true，如果任务已过期会立即执行，然后返回false</returns>
         ITimeTask AddTask(long timeoutMs, Action delegateTask);
 
+        void Step(long timeStamp);
+
 
     }
 
