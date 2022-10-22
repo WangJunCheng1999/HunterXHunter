@@ -10,10 +10,19 @@ namespace Framework.TimerTask {
 
     public class TimingWheelTimer : ITimer {
 
-        /// <summary>
-        /// 时间轮
-        /// </summary>
+        // 时间轮
         private readonly TimingWheel _timingWheel;
+
+        // 当前任务数
+        private readonly AtomicInt _taskCount = new();
+
+        // 时间戳获取
+        private readonly IDateTimeHelper _dateTimeHelper = new DateTimeHelper();
+
+        /// <summary>
+        /// 任务总数
+        /// </summary>
+        public int TaskCount => _taskCount.Get();
 
         /// <summary>
         /// 
@@ -24,13 +33,6 @@ namespace Framework.TimerTask {
         private TimingWheelTimer( long tickSpan, int slotCount, long startMs ) {
             _timingWheel = new TimingWheel(tickSpan, slotCount, startMs, _taskCount);
         }
-
-        /// <summary>
-        /// 任务总数
-        /// </summary>
-        public int TaskCount => _taskCount.Get();
-
-        private readonly AtomicInt _taskCount = new AtomicInt();
 
         /// <summary>
         /// 构建时间轮计时器
@@ -56,6 +58,25 @@ namespace Framework.TimerTask {
             return AddTask(timeoutMs, delegateTask);
         }
 
+        /// <summary>
+        /// 添加循环任务
+        /// </summary>
+        /// <param name="loopDuration"></param>
+        /// <param name="delegateTask"></param>
+        /// <returns></returns>
+        public ITimeTask AddLoopTask( TimeSpan duration, Action delegateTask ) {
+            ErrorCheck.NotNull(delegateTask, nameof(delegateTask));
+            ErrorCheck.NotNull(duration, nameof(duration));
+
+            return AddTask(new TimeTask(_dateTimeHelper.GetTimestamp(), duration, delegateTask));
+        }
+
+        /// <summary>
+        /// 添加任务
+        /// </summary>
+        /// <param name="timeoutMs"></param>
+        /// <param name="delegateTask"></param>
+        /// <returns></returns>
         public ITimeTask AddTask( long timeoutMs, Action delegateTask ) {
             ErrorCheck.NotNull(delegateTask, nameof(delegateTask));
 
@@ -68,18 +89,32 @@ namespace Framework.TimerTask {
         /// 添加任务
         /// </summary>
         /// <param name="timeTask">延时任务</param>
-        private void AddTask( TimeTask timeTask ) {
+        private ITimeTask AddTask( TimeTask timeTask ) {
             // 添加失败，说明该任务已到期，需要执行了
             if( !_timingWheel.AddTask(timeTask) ) {
-                if( timeTask.TaskStatus == TimeTaskStatus.Wait ) {
-                }
+                Game.Logger.Warning($"task:{timeTask.TimeoutMs}添加失败");
             }
+
+            return timeTask;
         }
 
+        /// <summary>
+        /// 推进时间轮
+        /// </summary>
+        /// <param name="timeStamp"> 当前的时间戳 </param>
+        public void Step( long timeStamp ) { _timingWheel.Step(timeStamp, HandleTaskTrigger); }
 
-        public void Step(long timeStamp)
-        {
-            _timingWheel.Step(timeStamp,(task => {task.Run();}));
+        /// <summary>
+        /// 处理任务触发事件
+        /// </summary>
+        /// <param name="task"></param>
+        private void HandleTaskTrigger( TimeTask task ) {
+            if( task.Type == TimeTaskType.Loop ) {
+                task.RefreshTimeout(_dateTimeHelper.GetTimestamp());
+                AddTask(task);
+            }
+
+            task.Run();
         }
 
     }
